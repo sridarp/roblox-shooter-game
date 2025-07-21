@@ -1,4 +1,4 @@
--- Main Game Manager
+-- Main Game Manager (Fixed Version)
 local GameManager = {}
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -22,36 +22,62 @@ local gameState = {
 
 function GameManager:InitializeGame()
     print("Initializing Shooter Game...")
+
+    -- Setup remote events FIRST before anything else
     self:SetupRemoteEvents()
+
+    -- Small delay to ensure replication
+    wait(1)
+
     self:SetupPlayerConnections()
     self:StartGameLoop()
+
+    print("Game Manager initialized successfully!")
 end
 
 function GameManager:SetupRemoteEvents()
-    local remoteEvents = Instance.new("Folder")
-    remoteEvents.Name = "RemoteEvents"
-    remoteEvents.Parent = ReplicatedStorage
+    print("Setting up Remote Events...")
+
+    -- Create RemoteEvents folder
+    local remoteEvents = ReplicatedStorage:FindFirstChild("RemoteEvents")
+    if not remoteEvents then
+        remoteEvents = Instance.new("Folder")
+        remoteEvents.Name = "RemoteEvents"
+        remoteEvents.Parent = ReplicatedStorage
+    end
 
     -- Create remote events for client-server communication
-    local shootEvent = Instance.new("RemoteEvent")
-    shootEvent.Name = "ShootEvent"
-    shootEvent.Parent = remoteEvents
+    local function createRemoteEvent(name)
+        local existingEvent = remoteEvents:FindFirstChild(name)
+        if existingEvent then
+            existingEvent:Destroy()
+        end
 
-    local reloadEvent = Instance.new("RemoteEvent")
-    reloadEvent.Name = "ReloadEvent"
-    reloadEvent.Parent = remoteEvents
+        local remoteEvent = Instance.new("RemoteEvent")
+        remoteEvent.Name = name
+        remoteEvent.Parent = remoteEvents
+        return remoteEvent
+    end
 
-    local damageEvent = Instance.new("RemoteEvent")
-    damageEvent.Name = "DamageEvent"
-    damageEvent.Parent = remoteEvents
+    local shootEvent = createRemoteEvent("ShootEvent")
+    local reloadEvent = createRemoteEvent("ReloadEvent")
+    local damageEvent = createRemoteEvent("DamageEvent")
 
     -- Connect events
     shootEvent.OnServerEvent:Connect(function(player, targetPosition, weaponType)
         self:HandleShooting(player, targetPosition, weaponType)
     end)
+
+    reloadEvent.OnServerEvent:Connect(function(player, weaponType)
+        print(player.Name .. " is reloading " .. weaponType)
+    end)
+
+    print("Remote Events created successfully!")
 end
 
 function GameManager:SetupPlayerConnections()
+    print("Setting up Player Connections...")
+
     Players.PlayerAdded:Connect(function(player)
         self:OnPlayerJoined(player)
     end)
@@ -59,6 +85,11 @@ function GameManager:SetupPlayerConnections()
     Players.PlayerRemoving:Connect(function(player)
         self:OnPlayerLeft(player)
     end)
+
+    -- Handle players already in game
+    for _, player in pairs(Players:GetPlayers()) do
+        self:OnPlayerJoined(player)
+    end
 end
 
 function GameManager:OnPlayerJoined(player)
@@ -73,24 +104,45 @@ function GameManager:OnPlayerJoined(player)
 
     -- Setup player character
     player.CharacterAdded:Connect(function(character)
+        wait(1) -- Wait for character to fully load
         self:SetupPlayerCharacter(player, character)
     end)
+
+    -- Handle if player already has character
+    if player.Character then
+        wait(1)
+        self:SetupPlayerCharacter(player, player.Character)
+    end
+end
+
+function GameManager:OnPlayerLeft(player)
+    print(player.Name .. " left the game!")
+    if gameState.players[player.UserId] then
+        gameState.players[player.UserId] = nil
+    end
 end
 
 function GameManager:SetupPlayerCharacter(player, character)
+    if not character then return end
+
     local humanoid = character:WaitForChild("Humanoid")
     humanoid.MaxHealth = GAME_CONFIG.MAX_HEALTH
     humanoid.Health = GAME_CONFIG.MAX_HEALTH
 
-    -- Add weapon to player
-    wait(1) -- Wait for character to fully load
-    self:GiveWeapon(player, "AssaultRifle")
+    -- Add weapon to player after a short delay
+    wait(2)
+    if player.Character == character then -- Make sure character still exists
+        self:GiveWeapon(player, "AssaultRifle")
+    end
 end
 
 function GameManager:GiveWeapon(player, weaponType)
+    if not player.Character then return end
+
     local weapon = self:CreateWeapon(weaponType)
-    if weapon and player.Character then
-        weapon.Parent = player.Character
+    if weapon then
+        weapon.Parent = player.Backpack
+        print("Gave " .. weaponType .. " to " .. player.Name)
     end
 end
 
@@ -152,15 +204,37 @@ function GameManager:CreateWeaponScript(weaponType)
         local mouse = player:GetMouse()
         local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-        local shootEvent = ReplicatedStorage:WaitForChild("RemoteEvents"):WaitForChild("ShootEvent")
+        -- Wait for remote events to be available
+        local remoteEvents = ReplicatedStorage:WaitForChild("RemoteEvents", 10)
+        if not remoteEvents then
+            warn("RemoteEvents not found!")
+            return
+        end
+
+        local shootEvent = remoteEvents:WaitForChild("ShootEvent", 5)
+        if not shootEvent then
+            warn("ShootEvent not found!")
+            return
+        end
 
         local weaponStats = {
             AssaultRifle = {damage = 25, fireRate = 0.1, range = 500, ammo = 30},
             Pistol = {damage = 35, fireRate = 0.3, range = 300, ammo = 12}
         }
 
-        local currentAmmo = weaponStats[tool.Name].ammo
+        local currentAmmo = weaponStats[tool.Name] and weaponStats[tool.Name].ammo or 30
         local canShoot = true
+
+        -- Update ammo display
+        local function updateAmmoDisplay()
+            local gui = player.PlayerGui:FindFirstChild("ShooterGameGUI")
+            if gui and gui:FindFirstChild("HUD") then
+                local ammoLabel = gui.HUD:FindFirstChild("AmmoLabel")
+                if ammoLabel then
+                    ammoLabel.Text = currentAmmo .. "/" .. (weaponStats[tool.Name] and weaponStats[tool.Name].ammo or 30)
+                end
+            end
+        end
 
         tool.Activated:Connect(function()
             if canShoot and currentAmmo > 0 then
@@ -180,9 +254,18 @@ function GameManager:CreateWeaponScript(weaponType)
                     flash.Parent = workspace
                 end
 
-                wait(weaponStats[tool.Name].fireRate)
+                -- Update ammo display
+                updateAmmoDisplay()
+
+                local fireRate = weaponStats[tool.Name] and weaponStats[tool.Name].fireRate or 0.1
+                wait(fireRate)
                 canShoot = true
             end
+        end)
+
+        -- Update ammo when tool is equipped
+        tool.Equipped:Connect(function()
+            updateAmmoDisplay()
         end)
     ]]
 
@@ -242,8 +325,12 @@ function GameManager:DamagePlayer(victim, attacker, weaponType)
 
     if humanoid.Health <= 0 then
         -- Player eliminated
-        gameState.players[attacker.UserId].kills = gameState.players[attacker.UserId].kills + 1
-        gameState.players[victim.UserId].deaths = gameState.players[victim.UserId].deaths + 1
+        if gameState.players[attacker.UserId] then
+            gameState.players[attacker.UserId].kills = gameState.players[attacker.UserId].kills + 1
+        end
+        if gameState.players[victim.UserId] then
+            gameState.players[victim.UserId].deaths = gameState.players[victim.UserId].deaths + 1
+        end
 
         print(attacker.Name .. " eliminated " .. victim.Name)
     end
