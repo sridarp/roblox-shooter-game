@@ -1,96 +1,49 @@
--- Main Game Manager (Fixed Version)
-local GameManager = {}
+-- Game Manager (ServerScript) - Fixed Version
+print("GameManager starting...")
+
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
+-- Create RemoteEvents IMMEDIATELY when script starts
+print("Creating RemoteEvents...")
+
+local remoteEvents = Instance.new("Folder")
+remoteEvents.Name = "RemoteEvents"
+remoteEvents.Parent = ReplicatedStorage
+
+local shootEvent = Instance.new("RemoteEvent")
+shootEvent.Name = "ShootEvent"
+shootEvent.Parent = remoteEvents
+
+local reloadEvent = Instance.new("RemoteEvent")
+reloadEvent.Name = "ReloadEvent"
+reloadEvent.Parent = remoteEvents
+
+local damageEvent = Instance.new("RemoteEvent")
+damageEvent.Name = "DamageEvent"
+damageEvent.Parent = remoteEvents
+
+print("RemoteEvents created successfully!")
+
 -- Game Configuration
 local GAME_CONFIG = {
     MAX_PLAYERS = 12,
-    ROUND_TIME = 300, -- 5 minutes
+    ROUND_TIME = 300,
     RESPAWN_TIME = 5,
     MAX_HEALTH = 100
 }
 
 -- Game State
 local gameState = {
-    isActive = false,
-    roundTime = 0,
+    isActive = true,
+    roundTime = 300,
     players = {},
     scores = {}
 }
 
-function GameManager:InitializeGame()
-    print("Initializing Shooter Game...")
-
-    -- Setup remote events FIRST before anything else
-    self:SetupRemoteEvents()
-
-    -- Small delay to ensure replication
-    wait(1)
-
-    self:SetupPlayerConnections()
-    self:StartGameLoop()
-
-    print("Game Manager initialized successfully!")
-end
-
-function GameManager:SetupRemoteEvents()
-    print("Setting up Remote Events...")
-
-    -- Create RemoteEvents folder
-    local remoteEvents = ReplicatedStorage:FindFirstChild("RemoteEvents")
-    if not remoteEvents then
-        remoteEvents = Instance.new("Folder")
-        remoteEvents.Name = "RemoteEvents"
-        remoteEvents.Parent = ReplicatedStorage
-    end
-
-    -- Create remote events for client-server communication
-    local function createRemoteEvent(name)
-        local existingEvent = remoteEvents:FindFirstChild(name)
-        if existingEvent then
-            existingEvent:Destroy()
-        end
-
-        local remoteEvent = Instance.new("RemoteEvent")
-        remoteEvent.Name = name
-        remoteEvent.Parent = remoteEvents
-        return remoteEvent
-    end
-
-    local shootEvent = createRemoteEvent("ShootEvent")
-    local reloadEvent = createRemoteEvent("ReloadEvent")
-    local damageEvent = createRemoteEvent("DamageEvent")
-
-    -- Connect events
-    shootEvent.OnServerEvent:Connect(function(player, targetPosition, weaponType)
-        self:HandleShooting(player, targetPosition, weaponType)
-    end)
-
-    reloadEvent.OnServerEvent:Connect(function(player, weaponType)
-        print(player.Name .. " is reloading " .. weaponType)
-    end)
-
-    print("Remote Events created successfully!")
-end
-
-function GameManager:SetupPlayerConnections()
-    print("Setting up Player Connections...")
-
-    Players.PlayerAdded:Connect(function(player)
-        self:OnPlayerJoined(player)
-    end)
-
-    Players.PlayerRemoving:Connect(function(player)
-        self:OnPlayerLeft(player)
-    end)
-
-    -- Handle players already in game
-    for _, player in pairs(Players:GetPlayers()) do
-        self:OnPlayerJoined(player)
-    end
-end
+-- Game Manager object
+local GameManager = {}
 
 function GameManager:OnPlayerJoined(player)
     print(player.Name .. " joined the game!")
@@ -102,23 +55,16 @@ function GameManager:OnPlayerJoined(player)
         score = 0
     }
 
-    -- Setup player character
+    -- Setup character when spawned
     player.CharacterAdded:Connect(function(character)
-        wait(1) -- Wait for character to fully load
+        wait(2) -- Wait for character to load
         self:SetupPlayerCharacter(player, character)
     end)
 
-    -- Handle if player already has character
+    -- Handle existing character
     if player.Character then
-        wait(1)
+        wait(2)
         self:SetupPlayerCharacter(player, player.Character)
-    end
-end
-
-function GameManager:OnPlayerLeft(player)
-    print(player.Name .. " left the game!")
-    if gameState.players[player.UserId] then
-        gameState.players[player.UserId] = nil
     end
 end
 
@@ -129,9 +75,9 @@ function GameManager:SetupPlayerCharacter(player, character)
     humanoid.MaxHealth = GAME_CONFIG.MAX_HEALTH
     humanoid.Health = GAME_CONFIG.MAX_HEALTH
 
-    -- Add weapon to player after a short delay
-    wait(2)
-    if player.Character == character then -- Make sure character still exists
+    -- Give weapon after short delay
+    wait(1)
+    if player.Character == character then
         self:GiveWeapon(player, "AssaultRifle")
     end
 end
@@ -139,103 +85,49 @@ end
 function GameManager:GiveWeapon(player, weaponType)
     if not player.Character then return end
 
-    local weapon = self:CreateWeapon(weaponType)
-    if weapon then
-        weapon.Parent = player.Backpack
-        print("Gave " .. weaponType .. " to " .. player.Name)
-    end
-end
-
-function GameManager:CreateWeapon(weaponType)
     local weapon = Instance.new("Tool")
     weapon.Name = weaponType
     weapon.RequiresHandle = true
 
-    -- Create weapon handle (3D model)
-    local handle = self:CreateWeaponModel(weaponType)
-    handle.Name = "Handle"
-    handle.Parent = weapon
-
-    -- Add weapon script
-    local weaponScript = self:CreateWeaponScript(weaponType)
-    weaponScript.Parent = weapon
-
-    return weapon
-end
-
-function GameManager:CreateWeaponModel(weaponType)
+    -- Create weapon handle
     local handle = Instance.new("Part")
-    handle.Size = Vector3.new(0.5, 0.3, 3)
+    handle.Name = "Handle"
+    handle.Size = Vector3.new(0.4, 0.3, 2.5)
     handle.Material = Enum.Material.Metal
     handle.BrickColor = BrickColor.new("Dark stone grey")
     handle.CanCollide = false
+    handle.Parent = weapon
 
-    -- Add weapon details based on type
-    if weaponType == "AssaultRifle" then
-        handle.Size = Vector3.new(0.4, 0.3, 2.5)
-
-        -- Create barrel
-        local barrel = Instance.new("Part")
-        barrel.Size = Vector3.new(0.1, 0.1, 1)
-        barrel.Material = Enum.Material.Metal
-        barrel.BrickColor = BrickColor.new("Really black")
-        barrel.CanCollide = false
-        barrel.Parent = handle
-
-        local barrelWeld = Instance.new("WeldConstraint")
-        barrelWeld.Part0 = handle
-        barrelWeld.Part1 = barrel
-        barrelWeld.Parent = handle
-
-        barrel.CFrame = handle.CFrame * CFrame.new(0, 0.1, -1.2)
-
-    elseif weaponType == "Pistol" then
-        handle.Size = Vector3.new(0.3, 0.2, 1.2)
-    end
-
-    return handle
-end
-
-function GameManager:CreateWeaponScript(weaponType)
-    local script = Instance.new("LocalScript")
-    script.Source = [[
+    -- Add weapon script
+    local weaponScript = Instance.new("LocalScript")
+    weaponScript.Source = [[
         local tool = script.Parent
         local player = game.Players.LocalPlayer
         local mouse = player:GetMouse()
+
         local ReplicatedStorage = game:GetService("ReplicatedStorage")
+        local remoteEvents = ReplicatedStorage:WaitForChild("RemoteEvents")
+        local shootEvent = remoteEvents:WaitForChild("ShootEvent")
 
-        -- Wait for remote events to be available
-        local remoteEvents = ReplicatedStorage:WaitForChild("RemoteEvents", 10)
-        if not remoteEvents then
-            warn("RemoteEvents not found!")
-            return
-        end
-
-        local shootEvent = remoteEvents:WaitForChild("ShootEvent", 5)
-        if not shootEvent then
-            warn("ShootEvent not found!")
-            return
-        end
-
-        local weaponStats = {
-            AssaultRifle = {damage = 25, fireRate = 0.1, range = 500, ammo = 30},
-            Pistol = {damage = 35, fireRate = 0.3, range = 300, ammo = 12}
-        }
-
-        local currentAmmo = weaponStats[tool.Name] and weaponStats[tool.Name].ammo or 30
+        local currentAmmo = 30
+        local maxAmmo = 30
         local canShoot = true
 
         -- Update ammo display
         local function updateAmmoDisplay()
             local gui = player.PlayerGui:FindFirstChild("ShooterGameGUI")
             if gui and gui:FindFirstChild("HUD") then
-                local ammoLabel = gui.HUD:FindFirstChild("AmmoLabel")
-                if ammoLabel then
-                    ammoLabel.Text = currentAmmo .. "/" .. (weaponStats[tool.Name] and weaponStats[tool.Name].ammo or 30)
+                local ammoFrame = gui.HUD:FindFirstChild("AmmoFrame")
+                if ammoFrame then
+                    local ammoLabel = ammoFrame:FindFirstChild("AmmoLabel")
+                    if ammoLabel then
+                        ammoLabel.Text = currentAmmo .. "/" .. maxAmmo
+                    end
                 end
             end
         end
 
+        -- Shooting function
         tool.Activated:Connect(function()
             if canShoot and currentAmmo > 0 then
                 canShoot = false
@@ -244,32 +136,40 @@ function GameManager:CreateWeaponScript(weaponType)
                 -- Fire weapon
                 shootEvent:FireServer(mouse.Hit.Position, tool.Name)
 
-                -- Create muzzle flash effect
+                -- Create muzzle flash
                 local handle = tool:FindFirstChild("Handle")
                 if handle then
-                    local flash = Instance.new("Explosion")
+                    local flash = Instance.new("Part")
+                    flash.Size = Vector3.new(0.2, 0.2, 0.5)
+                    flash.Material = Enum.Material.Neon
+                    flash.BrickColor = BrickColor.new("Bright yellow")
+                    flash.Anchored = true
+                    flash.CanCollide = false
                     flash.Position = handle.Position + handle.CFrame.LookVector * 2
-                    flash.BlastRadius = 5
-                    flash.BlastPressure = 0
                     flash.Parent = workspace
+
+                    -- Remove flash
+                    game:GetService("Debris"):AddItem(flash, 0.1)
                 end
 
-                -- Update ammo display
+                -- Update ammo
                 updateAmmoDisplay()
 
-                local fireRate = weaponStats[tool.Name] and weaponStats[tool.Name].fireRate or 0.1
-                wait(fireRate)
+                -- Fire rate delay
+                wait(0.1)
                 canShoot = true
             end
         end)
 
-        -- Update ammo when tool is equipped
+        -- Update ammo when equipped
         tool.Equipped:Connect(function()
             updateAmmoDisplay()
         end)
     ]]
+    weaponScript.Parent = weapon
 
-    return script
+    weapon.Parent = player.Backpack
+    print("Gave " .. weaponType .. " to " .. player.Name)
 end
 
 function GameManager:HandleShooting(player, targetPosition, weaponType)
@@ -279,111 +179,56 @@ function GameManager:HandleShooting(player, targetPosition, weaponType)
     local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
     if not humanoidRootPart then return end
 
-    -- Create raycast
+    -- Simple raycast
     local raycastParams = RaycastParams.new()
     raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
     raycastParams.FilterDescendantsInstances = {character}
 
-    local raycastResult = workspace:Raycast(
-        humanoidRootPart.Position,
-        (targetPosition - humanoidRootPart.Position).Unit * 500,
-        raycastParams
-    )
+    local direction = (targetPosition - humanoidRootPart.Position).Unit * 500
+    local raycastResult = workspace:Raycast(humanoidRootPart.Position, direction, raycastParams)
 
     if raycastResult then
         local hitPart = raycastResult.Instance
         local hitCharacter = hitPart.Parent
 
-        -- Check if we hit another player
+        -- Check if hit another player
         if hitCharacter:FindFirstChild("Humanoid") then
             local hitPlayer = Players:GetPlayerFromCharacter(hitCharacter)
             if hitPlayer and hitPlayer ~= player then
-                self:DamagePlayer(hitPlayer, player, weaponType)
+                -- Damage player
+                local humanoid = hitCharacter.Humanoid
+                humanoid.Health = humanoid.Health - 25
+
+                if humanoid.Health <= 0 then
+                    print(player.Name .. " eliminated " .. hitPlayer.Name)
+                    if gameState.players[player.UserId] then
+                        gameState.players[player.UserId].kills = gameState.players[player.UserId].kills + 1
+                    end
+                end
             end
         end
 
         -- Create hit effect
-        self:CreateHitEffect(raycastResult.Position)
+        local hitEffect = Instance.new("Explosion")
+        hitEffect.Position = raycastResult.Position
+        hitEffect.BlastRadius = 5
+        hitEffect.BlastPressure = 0
+        hitEffect.Parent = workspace
     end
 end
 
-function GameManager:DamagePlayer(victim, attacker, weaponType)
-    local character = victim.Character
-    if not character then return end
+-- Connect events
+shootEvent.OnServerEvent:Connect(function(player, targetPosition, weaponType)
+    GameManager:HandleShooting(player, targetPosition, weaponType)
+end)
 
-    local humanoid = character:FindFirstChild("Humanoid")
-    if not humanoid then return end
+-- Connect player events
+Players.PlayerAdded:Connect(function(player)
+    GameManager:OnPlayerJoined(player)
+end)
 
-    local damage = 25 -- Default damage
-    if weaponType == "AssaultRifle" then
-        damage = 25
-    elseif weaponType == "Pistol" then
-        damage = 35
-    end
-
-    humanoid.Health = humanoid.Health - damage
-
-    if humanoid.Health <= 0 then
-        -- Player eliminated
-        if gameState.players[attacker.UserId] then
-            gameState.players[attacker.UserId].kills = gameState.players[attacker.UserId].kills + 1
-        end
-        if gameState.players[victim.UserId] then
-            gameState.players[victim.UserId].deaths = gameState.players[victim.UserId].deaths + 1
-        end
-
-        print(attacker.Name .. " eliminated " .. victim.Name)
-    end
+-- Handle existing players
+for _, player in pairs(Players:GetPlayers()) do
+    GameManager:OnPlayerJoined(player)
 end
 
-function GameManager:CreateHitEffect(position)
-    local effect = Instance.new("Explosion")
-    effect.Position = position
-    effect.BlastRadius = 2
-    effect.BlastPressure = 0
-    effect.Visible = false
-    effect.Parent = workspace
-
-    -- Create spark effect
-    local spark = Instance.new("Part")
-    spark.Size = Vector3.new(0.1, 0.1, 0.1)
-    spark.Material = Enum.Material.Neon
-    spark.BrickColor = BrickColor.new("Bright yellow")
-    spark.Anchored = true
-    spark.CanCollide = false
-    spark.Position = position
-    spark.Parent = workspace
-
-    -- Remove spark after short time
-    game:GetService("Debris"):AddItem(spark, 0.5)
-end
-
-function GameManager:StartGameLoop()
-    gameState.isActive = true
-    gameState.roundTime = GAME_CONFIG.ROUND_TIME
-
-    RunService.Heartbeat:Connect(function()
-        if gameState.isActive then
-            gameState.roundTime = gameState.roundTime - RunService.Heartbeat:Wait()
-
-            if gameState.roundTime <= 0 then
-                self:EndRound()
-            end
-        end
-    end)
-end
-
-function GameManager:EndRound()
-    gameState.isActive = false
-    print("Round ended!")
-
-    -- Reset for next round
-    wait(10)
-    gameState.roundTime = GAME_CONFIG.ROUND_TIME
-    gameState.isActive = true
-end
-
--- Initialize the game
-GameManager:InitializeGame()
-
-return GameManager
