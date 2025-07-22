@@ -84,10 +84,13 @@ local function createMuzzleFlash(tool)
     local handle = tool:FindFirstChild("Handle")
     if not handle then return end
 
-    -- Create flash part
+    -- Find the flash hider for M4A1, or use handle for other weapons
+    local flashPoint = handle:FindFirstChild("FlashHider") or handle
+
+    -- Create main muzzle flash
     local flash = Instance.new("Part")
     flash.Name = "MuzzleFlash"
-    flash.Size = Vector3.new(0.5, 0.5, 1.2)
+    flash.Size = Vector3.new(0.6, 0.6, 1.5)
     flash.Material = Enum.Material.Neon
     flash.BrickColor = BrickColor.new("Bright yellow")
     flash.Anchored = true
@@ -95,26 +98,88 @@ local function createMuzzleFlash(tool)
     flash.Shape = Enum.PartType.Ball
     flash.Parent = workspace
 
-    -- Position flash at barrel
-    flash.CFrame = handle.CFrame * CFrame.new(0, 0, -handle.Size.Z/2 - 0.8)
+    -- Position flash at the flash hider/barrel end
+    if tool.Name == "AssaultRifle" and flashPoint.Name == "FlashHider" then
+        flash.CFrame = flashPoint.CFrame * CFrame.new(0, 0, -0.3)
+    else
+        flash.CFrame = handle.CFrame * CFrame.new(0, 0, -handle.Size.Z/2 - 0.8)
+    end
 
-    -- Create light
+    -- Create secondary flash effects
+    local flash2 = Instance.new("Part")
+    flash2.Name = "MuzzleFlash2"
+    flash2.Size = Vector3.new(0.3, 0.3, 0.8)
+    flash2.Material = Enum.Material.Neon
+    flash2.BrickColor = BrickColor.new("Bright orange")
+    flash2.Anchored = true
+    flash2.CanCollide = false
+    flash2.Shape = Enum.PartType.Ball
+    flash2.CFrame = flash.CFrame
+    flash2.Parent = workspace
+
+    -- Create bright light
     local light = Instance.new("PointLight")
-    light.Brightness = 5
-    light.Color = Color3.new(1, 1, 0)
-    light.Range = 15
+    light.Brightness = 8
+    light.Color = Color3.new(1, 0.8, 0)
+    light.Range = 20
     light.Parent = flash
 
-    -- Animate flash
-    local tween = TweenService:Create(flash, TweenInfo.new(0.1), {
+    -- Create smoke effect
+    local smoke = Instance.new("Part")
+    smoke.Name = "GunSmoke"
+    smoke.Size = Vector3.new(0.2, 0.2, 0.2)
+    smoke.Material = Enum.Material.Neon
+    smoke.BrickColor = BrickColor.new("Light stone grey")
+    smoke.Anchored = true
+    smoke.CanCollide = false
+    smoke.Transparency = 0.5
+    smoke.CFrame = flash.CFrame
+    smoke.Parent = workspace
+
+    -- Animate all effects
+    local flashTween = TweenService:Create(flash, TweenInfo.new(0.1), {
         Size = Vector3.new(0.1, 0.1, 0.1),
         Transparency = 1
     })
-    tween:Play()
 
-    tween.Completed:Connect(function()
+    local flash2Tween = TweenService:Create(flash2, TweenInfo.new(0.08), {
+        Size = Vector3.new(0.05, 0.05, 0.05),
+        Transparency = 1
+    })
+
+    local smokeTween = TweenService:Create(smoke, TweenInfo.new(0.5), {
+        Size = Vector3.new(1, 1, 1),
+        Transparency = 1,
+        CFrame = smoke.CFrame * CFrame.new(math.random(-2, 2), math.random(1, 3), math.random(-2, 2))
+    })
+
+    flashTween:Play()
+    flash2Tween:Play()
+    smokeTween:Play()
+
+    -- Clean up
+    flashTween.Completed:Connect(function()
         flash:Destroy()
     end)
+
+    flash2Tween.Completed:Connect(function()
+        flash2:Destroy()
+    end)
+
+    smokeTween.Completed:Connect(function()
+        smoke:Destroy()
+    end)
+
+    -- Activate tactical light briefly
+    if tool.Name == "AssaultRifle" then
+        local tacticalLight = handle:FindFirstChild("TacticalLight")
+        if tacticalLight and tacticalLight:FindFirstChild("SpotLight") then
+            local spotlight = tacticalLight.SpotLight
+            spotlight.Brightness = 2
+            wait(0.1)
+            spotlight.Brightness = 0
+        end
+    end
 end
 
 -- Enhanced shoot function with better timing

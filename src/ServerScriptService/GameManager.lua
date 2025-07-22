@@ -167,8 +167,252 @@ function GameManager:CreateWeaponModel(weaponType)
 
     -- Configure based on weapon type
     if weaponType == "AssaultRifle" then
-        handle.Size = Vector3.new(0.4, 0.3, 2.5)
+        -- M4A1 Main Body/Receiver
+        handle.Size = Vector3.new(0.4, 0.25, 2.8)
         handle.BrickColor = BrickColor.new("Dark stone grey")
+        handle.Material = Enum.Material.Metal
+
+        -- Create M4A1 Barrel
+        local barrel = Instance.new("Part")
+        barrel.Name = "Barrel"
+        barrel.Size = Vector3.new(0.08, 0.08, 1.4)
+        barrel.Material = Enum.Material.Metal
+        barrel.BrickColor = BrickColor.new("Really black")
+        barrel.CanCollide = false
+        barrel.Shape = Enum.PartType.Cylinder
+        barrel.TopSurface = Enum.SurfaceType.Smooth
+        barrel.BottomSurface = Enum.SurfaceType.Smooth
+        barrel.Parent = handle
+
+        local barrelWeld = Instance.new("WeldConstraint")
+        barrelWeld.Part0 = handle
+        barrelWeld.Part1 = barrel
+        barrelWeld.Parent = handle
+
+        -- Position barrel (rotate for cylinder)
+        barrel.CFrame = handle.CFrame * CFrame.new(0, 0.05, -1.6) * CFrame.Angles(0, math.rad(90), 0)
+
+        -- M4A1 Flash Hider
+        local flashHider = Instance.new("Part")
+        flashHider.Name = "FlashHider"
+        flashHider.Size = Vector3.new(0.12, 0.12, 0.3)
+        flashHider.Material = Enum.Material.Metal
+        flashHider.BrickColor = BrickColor.new("Really black")
+        flashHider.CanCollide = false
+        flashHider.Shape = Enum.PartType.Cylinder
+        flashHider.Parent = handle
+
+        local flashHiderWeld = Instance.new("WeldConstraint")
+        flashHiderWeld.Part0 = handle
+        flashHiderWeld.Part1 = flashHider
+        flashHiderWeld.Parent = handle
+
+        flashHider.CFrame = handle.CFrame * CFrame.new(0, 0.05, -2.4) * CFrame.Angles(0, math.rad(90), 0)
+
+        -- M4A1 Handguard/Rail System
+        local handguard = Instance.new("Part")
+        handguard.Name = "Handguard"
+        handguard.Size = Vector3.new(0.35, 0.2, 1.2)
+        handguard.Material = Enum.Material.Metal
+        handguard.BrickColor = BrickColor.new("Dark stone grey")
+        handguard.CanCollide = false
+        handguard.Parent = handle
+
+        local handguardWeld = Instance.new("WeldConstraint")
+        handguardWeld.Part0 = handle
+        handguardWeld.Part1 = handguard
+        handguardWeld.Parent = handle
+
+        handguard.CFrame = handle.CFrame * CFrame.new(0, 0.02, -0.8)
+
+        -- M4A1 Front Sight
+        local frontSight = Instance.new("Part")
+        frontSight.Name = "FrontSight"
+        frontSight.Size = Vector3.new(0.15, 0.15, 0.1)
+        frontSight.Material = Enum.Material.Metal
+        frontSight.BrickColor = BrickColor.new("Really black")
+        frontSight.CanCollide = false
+        frontSight.Parent = handle
+
+        local frontSightWeld = Instance.new("WeldConstraint")
+        frontSightWeld.Part0 = handle
+        frontSightWeld.Part1 = frontSight
+        frontSightWeld.Parent = handle
+
+        frontSight.CFrame = handle.CFrame * CFrame.new(0, 0.15, -1.8)
+
+        -- M4A1 Rear Sight
+        local rearSight = Instance.new("Part")
+        rearSight.Name = "RearSight"
+        rearSight.Size = Vector3.new(0.12, 0.12, 0.08)
+        rearSight.Material = Enum.Material.Metal
+        rearSight.BrickColor = BrickColor.new("Really black")
+        rearSight.CanCollide = false
+        rearSight.Parent = handle
+
+        local rearSightWeld = Instance.new("WeldConstraint")
+        rearSightWeld.Part0 = handle
+        rearSightWeld.Part1 = rearSight
+        rearSightWeld.Parent = handle
+
+        rearSight.CFrame = handle.CFrame * CFrame.new(0, 0.15, 0.3)
+
+        -- M4A1 Carrying Handle (Classic M4 Style)
+        local carryHandle = Instance.new("Part")
+        carryHandle.Name = "CarryHandle"
+        carryHandle.Size = Vector3.new(0.08, 0.25, 0.6)
+        carryHandle.Material = Enum.Material.Metal
+        carryHandle.BrickColor = BrickColor.new("Dark stone grey")
+        carryHandle.CanCollide = false
+        carryHandle.Parent = handle
+
+        local carryHandleWeld = Instance.new("WeldConstraint")
+        carryHandleWeld.Part0 = handle
+        carryHandleWeld.Part1 = carryHandle
+        carryHandleWeld.Parent = handle
+
+        carryHandle.CFrame = handle.CFrame * CFrame.new(0, 0.25, 0.1)
+
+        -- M4A1 Magazine
+        local magazine = Instance.new("Part")
+        magazine.Name = "Magazine"
+        magazine.Size = Vector3.new(0.15, 0.8, 0.25)
+        magazine.Material = Enum.Material.Metal
+        magazine.BrickColor = BrickColor.new("Really black")
+        magazine.CanCollide = false
+        magazine.Parent = handle
+
+        local magazineWeld = Instance.new("WeldConstraint")
+        magazineWeld.Part0 = handle
+        magazineWeld.Part1 = magazine
+        magazineWeld.Parent = handle
+
+        magazine.CFrame = handle.CFrame * CFrame.new(0, -0.5, -0.3)
+
+        -- M4A1 Trigger Guard
+        local triggerGuard = Instance.new("Part")
+        triggerGuard.Name = "TriggerGuard"
+        triggerGuard.Size = Vector3.new(0.25, 0.15, 0.3)
+        triggerGuard.Material = Enum.Material.Metal
+        triggerGuard.BrickColor = BrickColor.new("Dark stone grey")
+        triggerGuard.CanCollide = false
+        triggerGuard.Parent = handle
+
+        local triggerGuardWeld = Instance.new("WeldConstraint")
+        triggerGuardWeld.Part0 = handle
+        triggerGuardWeld.Part1 = triggerGuard
+        triggerGuardWeld.Parent = handle
+
+        triggerGuard.CFrame = handle.CFrame * CFrame.new(0, -0.18, 0.2)
+
+        -- M4A1 Pistol Grip
+        local pistolGrip = Instance.new("Part")
+        pistolGrip.Name = "PistolGrip"
+        pistolGrip.Size = Vector3.new(0.2, 0.6, 0.35)
+        pistolGrip.Material = Enum.Material.Plastic
+        pistolGrip.BrickColor = BrickColor.new("Really black")
+        pistolGrip.CanCollide = false
+        pistolGrip.Parent = handle
+
+        local pistolGripWeld = Instance.new("WeldConstraint")
+        pistolGripWeld.Part0 = handle
+        pistolGripWeld.Part1 = pistolGrip
+        pistolGripWeld.Parent = handle
+
+        pistolGrip.CFrame = handle.CFrame * CFrame.new(0, -0.4, 0.4) * CFrame.Angles(math.rad(-15), 0, 0)
+
+        -- M4A1 Stock (Collapsible)
+        local stock = Instance.new("Part")
+        stock.Name = "Stock"
+        stock.Size = Vector3.new(0.25, 0.2, 1.0)
+        stock.Material = Enum.Material.Plastic
+        stock.BrickColor = BrickColor.new("Really black")
+        stock.CanCollide = false
+        stock.Parent = handle
+
+        local stockWeld = Instance.new("WeldConstraint")
+        stockWeld.Part0 = handle
+        stockWeld.Part1 = stock
+        stockWeld.Parent = handle
+
+        stock.CFrame = handle.CFrame * CFrame.new(0, -0.05, 1.4)
+
+        -- M4A1 Buffer Tube
+        local bufferTube = Instance.new("Part")
+        bufferTube.Name = "BufferTube"
+        bufferTube.Size = Vector3.new(0.1, 0.1, 0.8)
+        bufferTube.Material = Enum.Material.Metal
+        bufferTube.BrickColor = BrickColor.new("Dark stone grey")
+        bufferTube.CanCollide = false
+        bufferTube.Shape = Enum.PartType.Cylinder
+        bufferTube.Parent = handle
+
+        local bufferTubeWeld = Instance.new("WeldConstraint")
+        bufferTubeWeld.Part0 = handle
+        bufferTubeWeld.Part1 = bufferTube
+        bufferTubeWeld.Parent = handle
+
+        bufferTube.CFrame = handle.CFrame * CFrame.new(0, 0.05, 1.0) * CFrame.Angles(0, math.rad(90), 0)
+
+        -- M4A1 Ejection Port
+        local ejectionPort = Instance.new("Part")
+        ejectionPort.Name = "EjectionPort"
+        ejectionPort.Size = Vector3.new(0.05, 0.15, 0.25)
+        ejectionPort.Material = Enum.Material.Metal
+        ejectionPort.BrickColor = BrickColor.new("Really black")
+        ejectionPort.CanCollide = false
+        ejectionPort.Parent = handle
+
+        local ejectionPortWeld = Instance.new("WeldConstraint")
+        ejectionPortWeld.Part0 = handle
+        ejectionPortWeld.Part1 = ejectionPort
+        ejectionPortWeld.Parent = handle
+
+        ejectionPort.CFrame = handle.CFrame * CFrame.new(0.22, 0.05, -0.2)
+
+        -- M4A1 Charging Handle
+        local chargingHandle = Instance.new("Part")
+        chargingHandle.Name = "ChargingHandle"
+        chargingHandle.Size = Vector3.new(0.08, 0.05, 0.15)
+        chargingHandle.Material = Enum.Material.Metal
+        chargingHandle.BrickColor = BrickColor.new("Really black")
+        chargingHandle.CanCollide = false
+        chargingHandle.Parent = handle
+
+        local chargingHandleWeld = Instance.new("WeldConstraint")
+        chargingHandleWeld.Part0 = handle
+        chargingHandleWeld.Part1 = chargingHandle
+        chargingHandleWeld.Parent = handle
+
+        chargingHandle.CFrame = handle.CFrame * CFrame.new(0, 0.15, 0.5)
+
+        -- Add some tactical accessories
+        -- Tactical Light
+        local tacticalLight = Instance.new("Part")
+        tacticalLight.Name = "TacticalLight"
+        tacticalLight.Size = Vector3.new(0.08, 0.08, 0.2)
+        tacticalLight.Material = Enum.Material.Metal
+        tacticalLight.BrickColor = BrickColor.new("Really black")
+        tacticalLight.CanCollide = false
+        tacticalLight.Shape = Enum.PartType.Cylinder
+        tacticalLight.Parent = handle
+
+        local tacticalLightWeld = Instance.new("WeldConstraint")
+        tacticalLightWeld.Part0 = handguard
+        tacticalLightWeld.Part1 = tacticalLight
+        tacticalLightWeld.Parent = handle
+
+        tacticalLight.CFrame = handguard.CFrame * CFrame.new(0, -0.15, -0.3) * CFrame.Angles(0, math.rad(90), 0)
+
+        -- Add tactical light glow
+        local lightSource = Instance.new("SpotLight")
+        lightSource.Brightness = 0
+        lightSource.Range = 50
+        lightSource.Angle = 45
+        lightSource.Color = Color3.new(1, 1, 0.8)
+        lightSource.Parent = tacticalLight
+
+        print("🔫 Created detailed M4A1 Assault Rifle model")
 
     elseif weaponType == "Pistol" then
         handle.Size = Vector3.new(0.3, 0.2, 1.2)
@@ -177,6 +421,23 @@ function GameManager:CreateWeaponModel(weaponType)
     elseif weaponType == "SniperRifle" then
         handle.Size = Vector3.new(0.3, 0.3, 3.5)
         handle.BrickColor = BrickColor.new("Dark stone grey")
+
+        -- Create scope
+        local scope = Instance.new("Part")
+        scope.Name = "Scope"
+        scope.Size = Vector3.new(0.2, 0.2, 0.8)
+        scope.Material = Enum.Material.Glass
+        scope.BrickColor = BrickColor.new("Really black")
+        scope.CanCollide = false
+        scope.Shape = Enum.PartType.Cylinder
+        scope.Parent = handle
+
+        local scopeWeld = Instance.new("WeldConstraint")
+        scopeWeld.Part0 = handle
+        scopeWeld.Part1 = scope
+        scopeWeld.Parent = handle
+
+        scope.CFrame = handle.CFrame * CFrame.new(0, 0.3, -0.5) * CFrame.Angles(0, math.rad(90), 0)
 
     elseif weaponType == "SMG" then
         handle.Size = Vector3.new(0.3, 0.25, 1.8)
@@ -529,4 +790,3 @@ print("🎯 Improved damage system active")
 print("💥 Visual effects system ready")
 
 return GameManager
-
