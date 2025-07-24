@@ -1,4 +1,4 @@
--- Weapon Handler (LocalScript) - Enhanced Version
+-- Weapon Handler (LocalScript) - Fixed Reload & Ammo System
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
@@ -18,6 +18,8 @@ local shootEvent = remoteEvents:WaitForChild("ShootEvent", 5)
 local reloadEvent = remoteEvents:WaitForChild("ReloadEvent", 5)
 local damageEvent = remoteEvents:WaitForChild("DamageEvent", 5)
 local healthUpdateEvent = remoteEvents:WaitForChild("HealthUpdateEvent", 5)
+local scoreboardUpdateEvent = remoteEvents:WaitForChild("ScoreboardUpdateEvent", 5)
+local ammoUpdateEvent = remoteEvents:WaitForChild("AmmoUpdateEvent", 5)
 
 -- Weapon stats
 local weaponStats = {
@@ -79,7 +81,91 @@ local function updateAmmoDisplay()
     end
 end
 
--- Create enhanced muzzle flash effect
+-- Update scoreboard display
+local function updateScoreboardDisplay(scoreData)
+    local gui = player.PlayerGui:FindFirstChild("ShooterGameGUI")
+    if not gui then return end
+
+    local scoreboard = gui:FindFirstChild("Scoreboard")
+    if not scoreboard then return end
+
+    local content = scoreboard:FindFirstChild("Content")
+    if not content then return end
+
+    -- Clear existing entries
+    for _, child in pairs(content:GetChildren()) do
+        if child:IsA("Frame") and child.Name ~= "Header" then
+            child:Destroy()
+        end
+    end
+
+    -- Add player entries
+    for i, playerData in ipairs(scoreData) do
+        local entry = Instance.new("Frame")
+        entry.Name = "Player" .. i
+        entry.Size = UDim2.new(1, -10, 0, 25)
+        entry.Position = UDim2.new(0, 5, 0, 30 + (i-1) * 27)
+        entry.BackgroundColor3 = Color3.new(0.2, 0.2, 0.2)
+        entry.BackgroundTransparency = 0.3
+        entry.BorderSizePixel = 0
+        entry.Parent = content
+
+        -- Player name
+        local nameLabel = Instance.new("TextLabel")
+        nameLabel.Size = UDim2.new(0.4, 0, 1, 0)
+        nameLabel.Position = UDim2.new(0, 5, 0, 0)
+        nameLabel.BackgroundTransparency = 1
+        nameLabel.Text = playerData.name
+        nameLabel.TextColor3 = Color3.new(1, 1, 1)
+        nameLabel.TextScaled = true
+        nameLabel.Font = Enum.Font.SourceSans
+        nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+        nameLabel.Parent = entry
+
+        -- Kills
+        local killsLabel = Instance.new("TextLabel")
+        killsLabel.Size = UDim2.new(0.15, 0, 1, 0)
+        killsLabel.Position = UDim2.new(0.4, 0, 0, 0)
+        killsLabel.BackgroundTransparency = 1
+        killsLabel.Text = tostring(playerData.kills)
+        killsLabel.TextColor3 = Color3.new(0, 1, 0)
+        killsLabel.TextScaled = true
+        killsLabel.Font = Enum.Font.SourceSansBold
+        killsLabel.Parent = entry
+
+        -- Deaths
+        local deathsLabel = Instance.new("TextLabel")
+        deathsLabel.Size = UDim2.new(0.15, 0, 1, 0)
+        deathsLabel.Position = UDim2.new(0.55, 0, 0, 0)
+        deathsLabel.BackgroundTransparency = 1
+        deathsLabel.Text = tostring(playerData.deaths)
+        deathsLabel.TextColor3 = Color3.new(1, 0, 0)
+        deathsLabel.TextScaled = true
+        deathsLabel.Font = Enum.Font.SourceSansBold
+        deathsLabel.Parent = entry
+
+        -- Score
+        local scoreLabel = Instance.new("TextLabel")
+        scoreLabel.Size = UDim2.new(0.3, 0, 1, 0)
+        scoreLabel.Position = UDim2.new(0.7, 0, 0, 0)
+        scoreLabel.BackgroundTransparency = 1
+        scoreLabel.Text = tostring(playerData.score)
+        scoreLabel.TextColor3 = Color3.new(1, 1, 0)
+        scoreLabel.TextScaled = true
+        scoreLabel.Font = Enum.Font.SourceSansBold
+        scoreLabel.Parent = entry
+
+        -- Highlight current player
+        if playerData.name == player.Name then
+            entry.BackgroundColor3 = Color3.new(0, 0.5, 1)
+            entry.BackgroundTransparency = 0.5
+        end
+    end
+
+    print("📊 Scoreboard updated with " .. #scoreData .. " players")
+end
+
+-- Enhanced muzzle flash
 local function createMuzzleFlash(tool)
     local handle = tool:FindFirstChild("Handle")
     if not handle then return end
@@ -169,226 +255,173 @@ local function createMuzzleFlash(tool)
     smokeTween.Completed:Connect(function()
         smoke:Destroy()
     end)
-
-    -- Activate tactical light briefly
-    if tool.Name == "AssaultRifle" then
-        local tacticalLight = handle:FindFirstChild("TacticalLight")
-        if tacticalLight and tacticalLight:FindFirstChild("SpotLight") then
-            local spotlight = tacticalLight.SpotLight
-            spotlight.Brightness = 2
-            wait(0.1)
-            spotlight.Brightness = 0
-        end
-    end
 end
 
--- Enhanced shoot function with better timing
+-- Enhanced shoot function
 local function shoot(tool)
     local currentTime = tick()
     local stats = weaponStats[tool.Name]
-    local fireRate = stats and stats.fireRate or 0.1
 
-    -- Check if we can shoot (fire rate, ammo, reloading)
-    if not canShoot or currentAmmo <= 0 or isReloading or (currentTime - lastShotTime) < fireRate then
+    if not stats then return end
+    if not canShoot then return end
+    if isReloading then return end
+    if currentAmmo <= 0 then
+        print("❌ No ammo! Press R to reload")
         return
     end
 
-    canShoot = false
-    lastShotTime = currentTime
-    currentAmmo = currentAmmo - 1
-
-    print("🔫 Firing " .. tool.Name .. " - Ammo: " .. currentAmmo .. "/" .. maxAmmo)
-
-    -- Fire weapon to server
-    if shootEvent then
-        shootEvent:FireServer(mouse.Hit.Position, tool.Name)
+    -- Check fire rate
+    if currentTime - lastShotTime < stats.fireRate then
+        return
     end
 
-    -- Create effects
+    lastShotTime = currentTime
+
+    -- Fire the weapon
+    shootEvent:FireServer(mouse.Hit.Position, tool.Name)
+
+    -- Create muzzle flash
     createMuzzleFlash(tool)
 
-    -- Update ammo display
-    updateAmmoDisplay()
-
-    -- Create crosshair hit feedback
-    local gui = player.PlayerGui:FindFirstChild("ShooterGameGUI")
-    if gui and gui:FindFirstChild("HUD") then
-        local crosshair = gui.HUD:FindFirstChild("Crosshair")
-        if crosshair then
-            -- Briefly expand crosshair
-            local originalSize = crosshair.Size
-            crosshair.Size = UDim2.new(0, 8, 0, 8)
-            crosshair.Position = UDim2.new(0.5, -4, 0.5, -4)
-
-            wait(0.05)
-
-            crosshair.Size = originalSize
-            crosshair.Position = UDim2.new(0.5, -2, 0.5, -2)
-        end
-    end
-
-    -- Reset shoot cooldown
-    wait(fireRate)
-    canShoot = true
+    print("🔫 Fired " .. tool.Name .. " - Ammo remaining: " .. (currentAmmo - 1))
 end
 
--- Enhanced reload function
+-- Reload function
 local function reload(tool)
-    if isReloading or currentAmmo >= maxAmmo then
+    if not tool then return end
+    if isReloading then return end
+    if currentAmmo >= maxAmmo then
+        print("🔄 Weapon is already fully loaded!")
         return
     end
 
+    local stats = weaponStats[tool.Name]
+    if not stats then return end
+
+    print("🔄 Reloading " .. tool.Name .. "...")
     isReloading = true
     canShoot = false
 
-    print("🔄 Reloading " .. tool.Name .. "...")
-
-    -- Update GUI to show reloading
+    -- Update ammo display to show reloading
     updateAmmoDisplay()
 
-    -- Send reload event to server
-    if reloadEvent then
-        reloadEvent:FireServer(tool.Name)
-    end
+    -- Send reload request to server
+    reloadEvent:FireServer(tool.Name)
 
-    -- Reload time
-    local stats = weaponStats[tool.Name]
-    local reloadTime = stats and stats.reloadTime or 2.0
-
-    wait(reloadTime)
-
-    -- Restore ammo
-    currentAmmo = maxAmmo
-    isReloading = false
-    canShoot = true
-
-    -- Update display
-    updateAmmoDisplay()
-
-    print("✅ Reload complete! Ammo: " .. currentAmmo .. "/" .. maxAmmo)
+    -- Wait for reload time
+    spawn(function()
+        wait(stats.reloadTime)
+        isReloading = false
+        canShoot = true
+        print("✅ Reload complete!")
+    end)
 end
 
 -- Handle tool equipped
 local function onToolEquipped(tool)
-    currentWeapon = tool
+    if not tool then return end
 
-    -- Set ammo based on weapon type
+    currentWeapon = tool
     local stats = weaponStats[tool.Name]
+
     if stats then
         maxAmmo = stats.maxAmmo
-        currentAmmo = maxAmmo
-    else
-        maxAmmo = 30
-        currentAmmo = 30
+        -- Don't reset ammo here - wait for server update
+        print("🔫 Equipped " .. tool.Name)
     end
 
-    canShoot = true
-    isReloading = false
-
-    updateAmmoDisplay()
-
-    -- Connect tool events
+    -- Connect mouse events
     tool.Activated:Connect(function()
         shoot(tool)
     end)
 
-    print("⚔️ Equipped " .. tool.Name .. " - Ammo: " .. currentAmmo .. "/" .. maxAmmo)
+    -- Update display
+    updateAmmoDisplay()
 end
 
 -- Handle tool unequipped
 local function onToolUnequipped(tool)
     currentWeapon = nil
-    canShoot = false
-    print("📦 Unequipped " .. tool.Name)
+    currentAmmo = 0
+    maxAmmo = 0
+    canShoot = true
+    isReloading = false
+
+    -- Update display
+    updateAmmoDisplay()
+
+    print("🔫 Unequipped weapon")
 end
 
--- Connect to backpack changes
-player.CharacterAdded:Connect(function(character)
-    local backpack = player:WaitForChild("Backpack")
-
-    -- Connect to existing tools
-    for _, tool in pairs(backpack:GetChildren()) do
-        if tool:IsA("Tool") then
-            tool.Equipped:Connect(function()
-                onToolEquipped(tool)
-            end)
-            tool.Unequipped:Connect(function()
-                onToolUnequipped(tool)
-            end)
-        end
-    end
-
-    -- Connect to new tools
-    backpack.ChildAdded:Connect(function(child)
-        if child:IsA("Tool") then
-            child.Equipped:Connect(function()
-                onToolEquipped(child)
-            end)
-            child.Unequipped:Connect(function()
-                onToolUnequipped(child)
-            end)
-        end
-    end)
-end)
-
--- Handle existing character
-if player.Character then
-    local backpack = player:WaitForChild("Backpack")
-
-    for _, tool in pairs(backpack:GetChildren()) do
-        if tool:IsA("Tool") then
-            tool.Equipped:Connect(function()
-                onToolEquipped(tool)
-            end)
-            tool.Unequipped:Connect(function()
-                onToolUnequipped(tool)
-            end)
-        end
-    end
-
-    backpack.ChildAdded:Connect(function(child)
-        if child:IsA("Tool") then
-            child.Equipped:Connect(function()
-                onToolEquipped(child)
-            end)
-            child.Unequipped:Connect(function()
-                onToolUnequipped(child)
-            end)
-        end
-    end)
-end
-
--- Handle reload input
+-- Connect input events
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
 
-    if input.KeyCode == Enum.KeyCode.R and currentWeapon then
-        reload(currentWeapon)
+    if input.KeyCode == Enum.KeyCode.R then
+        if currentWeapon then
+            reload(currentWeapon)
+        end
     end
 end)
 
-if damageEvent then
-    damageEvent.OnClientEvent:Connect(function(victimUserId, damage, newHealth, maxHealth)
-        if victimUserId == player.UserId then
-            print("💔 Took " .. damage .. " damage! Health: " .. math.floor(newHealth) .. "/" .. math.floor(maxHealth))
+-- Connect character events
+local function onCharacterAdded(character)
+    local humanoid = character:WaitForChild("Humanoid")
 
-            -- Create screen damage effect
-            local gui = player.PlayerGui:FindFirstChild("ShooterGameGUI")
-            if gui then
-                local damageOverlay = Instance.new("Frame")
-                damageOverlay.Name = "DamageOverlay"
-                damageOverlay.Size = UDim2.new(1, 0, 1, 0)
-                damageOverlay.BackgroundColor3 = Color3.new(1, 0, 0)
-                damageOverlay.BackgroundTransparency = 0.7
-                damageOverlay.BorderSizePixel = 0
-                damageOverlay.Parent = gui
-
-                -- Fade out damage overlay
-                local tween = TweenService:Create(damageOverlay, TweenInfo.new(0.5), {
-                    BackgroundTransparency = 1
-                })
-                tween:Play()
-            end
+    -- Connect tool equipped/unequipped events
+    humanoid.ChildAdded:Connect(function(child)
+        if child:IsA("Tool") then
+            onToolEquipped(child)
         end
     end)
+
+    humanoid.ChildRemoved:Connect(function(child)
+        if child:IsA("Tool") then
+            onToolUnequipped(child)
+        end
+    end)
+
+    -- Check for existing tool
+    for _, child in pairs(humanoid:GetChildren()) do
+        if child:IsA("Tool") then
+            onToolEquipped(child)
+        end
+    end
 end
+
+-- Connect player events
+if player.Character then
+    onCharacterAdded(player.Character)
+end
+
+player.CharacterAdded:Connect(onCharacterAdded)
+
+-- Connect remote events
+ammoUpdateEvent.OnClientEvent:Connect(function(newAmmo, newMaxAmmo)
+    currentAmmo = newAmmo
+    maxAmmo = newMaxAmmo
+    updateAmmoDisplay()
+    print("🔫 Ammo updated: " .. currentAmmo .. "/" .. maxAmmo)
+end)
+
+scoreboardUpdateEvent.OnClientEvent:Connect(function(scoreData)
+    updateScoreboardDisplay(scoreData)
+end)
+
+damageEvent.OnClientEvent:Connect(function(victimUserId, damage, newHealth, maxHealth)
+    local victim = Players:GetPlayerByUserId(victimUserId)
+    if victim then
+        print("💥 " .. victim.Name .. " took " .. damage .. " damage (" .. math.floor(newHealth) .. "/" .. maxHealth .. ")")
+    end
+end)
+
+healthUpdateEvent.OnClientEvent:Connect(function(playerUserId, health, maxHealth)
+    local targetPlayer = Players:GetPlayerByUserId(playerUserId)
+    if targetPlayer then
+        print("❤️ " .. targetPlayer.Name .. " health: " .. math.floor(health) .. "/" .. maxHealth)
+    end
+end)
+
+print("🔫 WeaponHandler initialized successfully!")
+print("🎯 Controls: Left Click = Shoot, R = Reload")
+print("📊 Scoreboard and ammo systems ready")

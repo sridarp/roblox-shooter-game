@@ -1,4 +1,4 @@
--- Game Manager (ServerScript) - Fixed Damage System
+-- Game Manager (ServerScript) - Fixed Scoreboard & Ammo System
 print("GameManager starting...")
 
 local Players = game:GetService("Players")
@@ -37,6 +37,14 @@ local healthUpdateEvent = Instance.new("RemoteEvent")
 healthUpdateEvent.Name = "HealthUpdateEvent"
 healthUpdateEvent.Parent = remoteEvents
 
+local scoreboardUpdateEvent = Instance.new("RemoteEvent")
+scoreboardUpdateEvent.Name = "ScoreboardUpdateEvent"
+scoreboardUpdateEvent.Parent = remoteEvents
+
+local ammoUpdateEvent = Instance.new("RemoteEvent")
+ammoUpdateEvent.Name = "AmmoUpdateEvent"
+ammoUpdateEvent.Parent = remoteEvents
+
 print("RemoteEvents created successfully!")
 
 -- Game Configuration
@@ -53,25 +61,29 @@ local WEAPON_STATS = {
         damage = 25,
         fireRate = 0.1,
         range = 500,
-        maxAmmo = 30
+        maxAmmo = 30,
+        reloadTime = 2.5
     },
     Pistol = {
         damage = 35,
         fireRate = 0.3,
         range = 300,
-        maxAmmo = 12
+        maxAmmo = 12,
+        reloadTime = 1.5
     },
     SniperRifle = {
         damage = 80,
         fireRate = 1.0,
         range = 1000,
-        maxAmmo = 5
+        maxAmmo = 5,
+        reloadTime = 3.0
     },
     SMG = {
         damage = 20,
         fireRate = 0.05,
         range = 250,
-        maxAmmo = 40
+        maxAmmo = 40,
+        reloadTime = 2.0
     }
 }
 
@@ -80,12 +92,39 @@ local gameState = {
     isActive = true,
     roundTime = 300,
     players = {},
-    scores = {},
-    lastShotTime = {} -- Track last shot time per player to prevent spam
+    playerAmmo = {}, -- Track ammo per player
+    lastShotTime = {}
 }
 
 -- Game Manager
 local GameManager = {}
+
+-- Broadcast scoreboard update to all players
+function GameManager:UpdateScoreboard()
+    local scoreData = {}
+
+    for userId, data in pairs(gameState.players) do
+        local player = Players:GetPlayerByUserId(userId)
+        if player then
+            table.insert(scoreData, {
+                name = player.Name,
+                kills = data.kills,
+                deaths = data.deaths,
+                score = data.score,
+                health = data.health
+            })
+        end
+    end
+
+    -- Sort by score (highest first)
+    table.sort(scoreData, function(a, b)
+        return a.score > b.score
+    end)
+
+    -- Send to all clients
+    scoreboardUpdateEvent:FireAllClients(scoreData)
+    print("📊 Scoreboard updated with " .. #scoreData .. " players")
+end
 
 function GameManager:OnPlayerJoined(player)
     print(player.Name .. " joined the game!")
@@ -99,11 +138,16 @@ function GameManager:OnPlayerJoined(player)
         health = GAME_CONFIG.MAX_HEALTH
     }
 
+    -- Initialize ammo data
+    gameState.playerAmmo[player.UserId] = {}
     gameState.lastShotTime[player.UserId] = 0
+
+    -- Update scoreboard
+    self:UpdateScoreboard()
 
     -- Setup character when spawned
     player.CharacterAdded:Connect(function(character)
-        wait(3) -- Wait for character to fully load
+        wait(3)
         self:SetupPlayerCharacter(player, character)
     end)
 
@@ -119,9 +163,15 @@ function GameManager:OnPlayerLeft(player)
     if gameState.players[player.UserId] then
         gameState.players[player.UserId] = nil
     end
+    if gameState.playerAmmo[player.UserId] then
+        gameState.playerAmmo[player.UserId] = nil
+    end
     if gameState.lastShotTime[player.UserId] then
         gameState.lastShotTime[player.UserId] = nil
     end
+
+    -- Update scoreboard
+    self:UpdateScoreboard()
 end
 
 function GameManager:SetupPlayerCharacter(player, character)
@@ -143,6 +193,9 @@ function GameManager:SetupPlayerCharacter(player, character)
         if gameState.players[player.UserId] then
             gameState.players[player.UserId].health = health
         end
+
+        -- Update scoreboard when health changes
+        self:UpdateScoreboard()
 
         -- Broadcast health update to all clients
         healthUpdateEvent:FireAllClients(player.UserId, health, humanoid.MaxHealth)
@@ -189,7 +242,6 @@ function GameManager:CreateWeaponModel(weaponType)
         barrelWeld.Part1 = barrel
         barrelWeld.Parent = handle
 
-        -- Position barrel (rotate for cylinder)
         barrel.CFrame = handle.CFrame * CFrame.new(0, 0.05, -1.6) * CFrame.Angles(0, math.rad(90), 0)
 
         -- M4A1 Flash Hider
@@ -209,70 +261,6 @@ function GameManager:CreateWeaponModel(weaponType)
 
         flashHider.CFrame = handle.CFrame * CFrame.new(0, 0.05, -2.4) * CFrame.Angles(0, math.rad(90), 0)
 
-        -- M4A1 Handguard/Rail System
-        local handguard = Instance.new("Part")
-        handguard.Name = "Handguard"
-        handguard.Size = Vector3.new(0.35, 0.2, 1.2)
-        handguard.Material = Enum.Material.Metal
-        handguard.BrickColor = BrickColor.new("Dark stone grey")
-        handguard.CanCollide = false
-        handguard.Parent = handle
-
-        local handguardWeld = Instance.new("WeldConstraint")
-        handguardWeld.Part0 = handle
-        handguardWeld.Part1 = handguard
-        handguardWeld.Parent = handle
-
-        handguard.CFrame = handle.CFrame * CFrame.new(0, 0.02, -0.8)
-
-        -- M4A1 Front Sight
-        local frontSight = Instance.new("Part")
-        frontSight.Name = "FrontSight"
-        frontSight.Size = Vector3.new(0.15, 0.15, 0.1)
-        frontSight.Material = Enum.Material.Metal
-        frontSight.BrickColor = BrickColor.new("Really black")
-        frontSight.CanCollide = false
-        frontSight.Parent = handle
-
-        local frontSightWeld = Instance.new("WeldConstraint")
-        frontSightWeld.Part0 = handle
-        frontSightWeld.Part1 = frontSight
-        frontSightWeld.Parent = handle
-
-        frontSight.CFrame = handle.CFrame * CFrame.new(0, 0.15, -1.8)
-
-        -- M4A1 Rear Sight
-        local rearSight = Instance.new("Part")
-        rearSight.Name = "RearSight"
-        rearSight.Size = Vector3.new(0.12, 0.12, 0.08)
-        rearSight.Material = Enum.Material.Metal
-        rearSight.BrickColor = BrickColor.new("Really black")
-        rearSight.CanCollide = false
-        rearSight.Parent = handle
-
-        local rearSightWeld = Instance.new("WeldConstraint")
-        rearSightWeld.Part0 = handle
-        rearSightWeld.Part1 = rearSight
-        rearSightWeld.Parent = handle
-
-        rearSight.CFrame = handle.CFrame * CFrame.new(0, 0.15, 0.3)
-
-        -- M4A1 Carrying Handle (Classic M4 Style)
-        local carryHandle = Instance.new("Part")
-        carryHandle.Name = "CarryHandle"
-        carryHandle.Size = Vector3.new(0.08, 0.25, 0.6)
-        carryHandle.Material = Enum.Material.Metal
-        carryHandle.BrickColor = BrickColor.new("Dark stone grey")
-        carryHandle.CanCollide = false
-        carryHandle.Parent = handle
-
-        local carryHandleWeld = Instance.new("WeldConstraint")
-        carryHandleWeld.Part0 = handle
-        carryHandleWeld.Part1 = carryHandle
-        carryHandleWeld.Parent = handle
-
-        carryHandle.CFrame = handle.CFrame * CFrame.new(0, 0.25, 0.1)
-
         -- M4A1 Magazine
         local magazine = Instance.new("Part")
         magazine.Name = "Magazine"
@@ -289,39 +277,7 @@ function GameManager:CreateWeaponModel(weaponType)
 
         magazine.CFrame = handle.CFrame * CFrame.new(0, -0.5, -0.3)
 
-        -- M4A1 Trigger Guard
-        local triggerGuard = Instance.new("Part")
-        triggerGuard.Name = "TriggerGuard"
-        triggerGuard.Size = Vector3.new(0.25, 0.15, 0.3)
-        triggerGuard.Material = Enum.Material.Metal
-        triggerGuard.BrickColor = BrickColor.new("Dark stone grey")
-        triggerGuard.CanCollide = false
-        triggerGuard.Parent = handle
-
-        local triggerGuardWeld = Instance.new("WeldConstraint")
-        triggerGuardWeld.Part0 = handle
-        triggerGuardWeld.Part1 = triggerGuard
-        triggerGuardWeld.Parent = handle
-
-        triggerGuard.CFrame = handle.CFrame * CFrame.new(0, -0.18, 0.2)
-
-        -- M4A1 Pistol Grip
-        local pistolGrip = Instance.new("Part")
-        pistolGrip.Name = "PistolGrip"
-        pistolGrip.Size = Vector3.new(0.2, 0.6, 0.35)
-        pistolGrip.Material = Enum.Material.Plastic
-        pistolGrip.BrickColor = BrickColor.new("Really black")
-        pistolGrip.CanCollide = false
-        pistolGrip.Parent = handle
-
-        local pistolGripWeld = Instance.new("WeldConstraint")
-        pistolGripWeld.Part0 = handle
-        pistolGripWeld.Part1 = pistolGrip
-        pistolGripWeld.Parent = handle
-
-        pistolGrip.CFrame = handle.CFrame * CFrame.new(0, -0.4, 0.4) * CFrame.Angles(math.rad(-15), 0, 0)
-
-        -- M4A1 Stock (Collapsible)
+        -- M4A1 Stock
         local stock = Instance.new("Part")
         stock.Name = "Stock"
         stock.Size = Vector3.new(0.25, 0.2, 1.0)
@@ -337,83 +293,6 @@ function GameManager:CreateWeaponModel(weaponType)
 
         stock.CFrame = handle.CFrame * CFrame.new(0, -0.05, 1.4)
 
-        -- M4A1 Buffer Tube
-        local bufferTube = Instance.new("Part")
-        bufferTube.Name = "BufferTube"
-        bufferTube.Size = Vector3.new(0.1, 0.1, 0.8)
-        bufferTube.Material = Enum.Material.Metal
-        bufferTube.BrickColor = BrickColor.new("Dark stone grey")
-        bufferTube.CanCollide = false
-        bufferTube.Shape = Enum.PartType.Cylinder
-        bufferTube.Parent = handle
-
-        local bufferTubeWeld = Instance.new("WeldConstraint")
-        bufferTubeWeld.Part0 = handle
-        bufferTubeWeld.Part1 = bufferTube
-        bufferTubeWeld.Parent = handle
-
-        bufferTube.CFrame = handle.CFrame * CFrame.new(0, 0.05, 1.0) * CFrame.Angles(0, math.rad(90), 0)
-
-        -- M4A1 Ejection Port
-        local ejectionPort = Instance.new("Part")
-        ejectionPort.Name = "EjectionPort"
-        ejectionPort.Size = Vector3.new(0.05, 0.15, 0.25)
-        ejectionPort.Material = Enum.Material.Metal
-        ejectionPort.BrickColor = BrickColor.new("Really black")
-        ejectionPort.CanCollide = false
-        ejectionPort.Parent = handle
-
-        local ejectionPortWeld = Instance.new("WeldConstraint")
-        ejectionPortWeld.Part0 = handle
-        ejectionPortWeld.Part1 = ejectionPort
-        ejectionPortWeld.Parent = handle
-
-        ejectionPort.CFrame = handle.CFrame * CFrame.new(0.22, 0.05, -0.2)
-
-        -- M4A1 Charging Handle
-        local chargingHandle = Instance.new("Part")
-        chargingHandle.Name = "ChargingHandle"
-        chargingHandle.Size = Vector3.new(0.08, 0.05, 0.15)
-        chargingHandle.Material = Enum.Material.Metal
-        chargingHandle.BrickColor = BrickColor.new("Really black")
-        chargingHandle.CanCollide = false
-        chargingHandle.Parent = handle
-
-        local chargingHandleWeld = Instance.new("WeldConstraint")
-        chargingHandleWeld.Part0 = handle
-        chargingHandleWeld.Part1 = chargingHandle
-        chargingHandleWeld.Parent = handle
-
-        chargingHandle.CFrame = handle.CFrame * CFrame.new(0, 0.15, 0.5)
-
-        -- Add some tactical accessories
-        -- Tactical Light
-        local tacticalLight = Instance.new("Part")
-        tacticalLight.Name = "TacticalLight"
-        tacticalLight.Size = Vector3.new(0.08, 0.08, 0.2)
-        tacticalLight.Material = Enum.Material.Metal
-        tacticalLight.BrickColor = BrickColor.new("Really black")
-        tacticalLight.CanCollide = false
-        tacticalLight.Shape = Enum.PartType.Cylinder
-        tacticalLight.Parent = handle
-
-        local tacticalLightWeld = Instance.new("WeldConstraint")
-        tacticalLightWeld.Part0 = handguard
-        tacticalLightWeld.Part1 = tacticalLight
-        tacticalLightWeld.Parent = handle
-
-        tacticalLight.CFrame = handguard.CFrame * CFrame.new(0, -0.15, -0.3) * CFrame.Angles(0, math.rad(90), 0)
-
-        -- Add tactical light glow
-        local lightSource = Instance.new("SpotLight")
-        lightSource.Brightness = 0
-        lightSource.Range = 50
-        lightSource.Angle = 45
-        lightSource.Color = Color3.new(1, 1, 0.8)
-        lightSource.Parent = tacticalLight
-
-        print("🔫 Created detailed M4A1 Assault Rifle model")
-
     elseif weaponType == "Pistol" then
         handle.Size = Vector3.new(0.3, 0.2, 1.2)
         handle.BrickColor = BrickColor.new("Really black")
@@ -421,23 +300,6 @@ function GameManager:CreateWeaponModel(weaponType)
     elseif weaponType == "SniperRifle" then
         handle.Size = Vector3.new(0.3, 0.3, 3.5)
         handle.BrickColor = BrickColor.new("Dark stone grey")
-
-        -- Create scope
-        local scope = Instance.new("Part")
-        scope.Name = "Scope"
-        scope.Size = Vector3.new(0.2, 0.2, 0.8)
-        scope.Material = Enum.Material.Glass
-        scope.BrickColor = BrickColor.new("Really black")
-        scope.CanCollide = false
-        scope.Shape = Enum.PartType.Cylinder
-        scope.Parent = handle
-
-        local scopeWeld = Instance.new("WeldConstraint")
-        scopeWeld.Part0 = handle
-        scopeWeld.Part1 = scope
-        scopeWeld.Parent = handle
-
-        scope.CFrame = handle.CFrame * CFrame.new(0, 0.3, -0.5) * CFrame.Angles(0, math.rad(90), 0)
 
     elseif weaponType == "SMG" then
         handle.Size = Vector3.new(0.3, 0.25, 1.8)
@@ -480,7 +342,18 @@ function GameManager:GiveWeapon(player, weaponType)
         fireRate.Name = "FireRate"
         fireRate.Value = stats.fireRate
         fireRate.Parent = weapon
+
+        local reloadTime = Instance.new("NumberValue")
+        reloadTime.Name = "ReloadTime"
+        reloadTime.Value = stats.reloadTime
+        reloadTime.Parent = weapon
     end
+
+    -- Initialize ammo for this weapon
+    if not gameState.playerAmmo[player.UserId] then
+        gameState.playerAmmo[player.UserId] = {}
+    end
+    gameState.playerAmmo[player.UserId][weaponType] = stats.maxAmmo
 
     -- Add weapon to player
     weapon.Parent = player.Backpack
@@ -490,11 +363,21 @@ function GameManager:GiveWeapon(player, weaponType)
         gameState.players[player.UserId].currentWeapon = weaponType
     end
 
+    -- Send initial ammo to client
+    ammoUpdateEvent:FireClient(player, stats.maxAmmo, stats.maxAmmo)
+
     print("Successfully gave " .. weaponType .. " to " .. player.Name)
 end
 
 function GameManager:HandleShooting(player, targetPosition, weaponType)
     if not player.Character then return end
+
+    -- Check if player has ammo
+    local playerAmmo = gameState.playerAmmo[player.UserId]
+    if not playerAmmo or not playerAmmo[weaponType] or playerAmmo[weaponType] <= 0 then
+        print("❌ " .. player.Name .. " has no ammo for " .. weaponType)
+        return
+    end
 
     -- Check fire rate limiting
     local currentTime = tick()
@@ -503,30 +386,34 @@ function GameManager:HandleShooting(player, targetPosition, weaponType)
     local fireRate = weaponStats and weaponStats.fireRate or 0.1
 
     if currentTime - lastShot < fireRate then
-        return -- Too soon to shoot again
+        return
     end
 
     gameState.lastShotTime[player.UserId] = currentTime
+
+    -- Consume ammo
+    playerAmmo[weaponType] = playerAmmo[weaponType] - 1
+
+    -- Send ammo update to client
+    local maxAmmo = weaponStats and weaponStats.maxAmmo or 30
+    ammoUpdateEvent:FireClient(player, playerAmmo[weaponType], maxAmmo)
 
     local character = player.Character
     local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
     if not humanoidRootPart then return end
 
-    print("🔫 " .. player.Name .. " fired " .. weaponType)
+    print("🔫 " .. player.Name .. " fired " .. weaponType .. " - Ammo: " .. playerAmmo[weaponType] .. "/" .. maxAmmo)
 
     -- Create raycast
     local raycastParams = RaycastParams.new()
     raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
     raycastParams.FilterDescendantsInstances = {character}
 
-    local startPosition = humanoidRootPart.Position + Vector3.new(0, 1.5, 0) -- Shoulder height
+    local startPosition = humanoidRootPart.Position + Vector3.new(0, 1.5, 0)
     local direction = (targetPosition - startPosition).Unit
     local range = weaponStats and weaponStats.range or 500
 
     local raycastResult = workspace:Raycast(startPosition, direction * range, raycastParams)
-
-    -- Create bullet trail effect
-    self:CreateBulletTrail(startPosition, raycastResult and raycastResult.Position or (startPosition + direction * range))
 
     if raycastResult then
         local hitPart = raycastResult.Instance
@@ -547,18 +434,41 @@ function GameManager:HandleShooting(player, targetPosition, weaponType)
     end
 end
 
-function GameManager:DamagePlayer(victim, attacker, weaponType, hitPosition)
-    local character = victim.Character
-    if not character then
-        print("❌ No character found for victim")
+function GameManager:HandleReload(player, weaponType)
+    if not player.Character then return end
+
+    local playerAmmo = gameState.playerAmmo[player.UserId]
+    if not playerAmmo then return end
+
+    local weaponStats = WEAPON_STATS[weaponType]
+    if not weaponStats then return end
+
+    -- Check if already full
+    if playerAmmo[weaponType] >= weaponStats.maxAmmo then
+        print("🔄 " .. player.Name .. "'s " .. weaponType .. " is already full")
         return
     end
 
+    print("🔄 " .. player.Name .. " is reloading " .. weaponType .. "...")
+
+    -- Set ammo to full after reload time
+    spawn(function()
+        wait(weaponStats.reloadTime)
+        playerAmmo[weaponType] = weaponStats.maxAmmo
+
+        -- Send updated ammo to client
+        ammoUpdateEvent:FireClient(player, playerAmmo[weaponType], weaponStats.maxAmmo)
+
+        print("✅ " .. player.Name .. " finished reloading " .. weaponType)
+    end)
+end
+
+function GameManager:DamagePlayer(victim, attacker, weaponType, hitPosition)
+    local character = victim.Character
+    if not character then return end
+
     local humanoid = character:FindFirstChild("Humanoid")
-    if not humanoid then
-        print("❌ No humanoid found for victim")
-        return
-    end
+    if not humanoid then return end
 
     -- Get weapon damage
     local damage = WEAPON_STATS[weaponType] and WEAPON_STATS[weaponType].damage or 25
@@ -577,16 +487,19 @@ function GameManager:DamagePlayer(victim, attacker, weaponType, hitPosition)
         gameState.players[victim.UserId].health = newHealth
     end
 
-    -- Create damage effect on victim (visible to all players)
+    -- Create damage effect
     self:CreateDamageEffect(hitPosition, damage, victim)
 
-    -- Fire damage event to all clients for UI updates
+    -- Fire damage event to all clients
     damageEvent:FireAllClients(victim.UserId, damage, newHealth, humanoid.MaxHealth)
 
     -- Check if player was eliminated
     if newHealth <= 0 then
         self:HandlePlayerElimination(victim, attacker, weaponType)
     end
+
+    -- Update scoreboard
+    self:UpdateScoreboard()
 end
 
 function GameManager:HandlePlayerElimination(victim, attacker, weaponType)
@@ -602,34 +515,16 @@ function GameManager:HandlePlayerElimination(victim, attacker, weaponType)
 
     print("💀 " .. attacker.Name .. " eliminated " .. victim.Name .. " with " .. weaponType)
 
+    -- Update scoreboard immediately
+    self:UpdateScoreboard()
+
     -- Create elimination effect
     if victim.Character and victim.Character:FindFirstChild("HumanoidRootPart") then
         self:CreateEliminationEffect(victim.Character.HumanoidRootPart.Position)
     end
 end
 
-function GameManager:CreateBulletTrail(startPos, endPos)
-    local trail = Instance.new("Part")
-    trail.Name = "BulletTrail"
-    trail.Size = Vector3.new(0.1, 0.1, (startPos - endPos).Magnitude)
-    trail.Material = Enum.Material.Neon
-    trail.BrickColor = BrickColor.new("Bright yellow")
-    trail.Anchored = true
-    trail.CanCollide = false
-    trail.CFrame = CFrame.lookAt(startPos, endPos) * CFrame.new(0, 0, -trail.Size.Z/2)
-    trail.Parent = workspace
-
-    -- Fade out trail
-    local tween = TweenService:Create(trail, TweenInfo.new(0.1), {Transparency = 1})
-    tween:Play()
-
-    tween.Completed:Connect(function()
-        trail:Destroy()
-    end)
-end
-
 function GameManager:CreateHitEffect(position)
-    -- Create spark effect
     local spark = Instance.new("Part")
     spark.Name = "HitEffect"
     spark.Size = Vector3.new(0.4, 0.4, 0.4)
@@ -641,14 +536,6 @@ function GameManager:CreateHitEffect(position)
     spark.Position = position
     spark.Parent = workspace
 
-    -- Add light
-    local light = Instance.new("PointLight")
-    light.Brightness = 3
-    light.Color = Color3.new(1, 1, 0)
-    light.Range = 10
-    light.Parent = spark
-
-    -- Animate spark
     local tween = TweenService:Create(spark, TweenInfo.new(0.3), {
         Size = Vector3.new(0.1, 0.1, 0.1),
         Transparency = 1
@@ -661,11 +548,9 @@ function GameManager:CreateHitEffect(position)
 end
 
 function GameManager:CreateDamageEffect(position, damage, victim)
-    -- Create damage number that all players can see
     local damageGui = Instance.new("BillboardGui")
     damageGui.Size = UDim2.new(0, 100, 0, 50)
     damageGui.StudsOffset = Vector3.new(math.random(-2, 2), 3, math.random(-2, 2))
-    damageGui.LightInfluence = 0
 
     local damageLabel = Instance.new("TextLabel")
     damageLabel.Size = UDim2.new(1, 0, 1, 0)
@@ -676,10 +561,8 @@ function GameManager:CreateDamageEffect(position, damage, victim)
     damageLabel.Font = Enum.Font.SourceSansBold
     damageLabel.TextStrokeTransparency = 0
     damageLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
-    damageLabel.TextStrokeTransparency = 0.5
     damageLabel.Parent = damageGui
 
-    -- Create invisible part to attach GUI to
     local part = Instance.new("Part")
     part.Size = Vector3.new(0.1, 0.1, 0.1)
     part.Anchored = true
@@ -690,59 +573,15 @@ function GameManager:CreateDamageEffect(position, damage, victim)
 
     damageGui.Parent = part
 
-    -- Animate damage number
-    local tween1 = TweenService:Create(damageGui, TweenInfo.new(0.5), {
-        StudsOffset = damageGui.StudsOffset + Vector3.new(0, 2, 0)
-    })
-
-    local tween2 = TweenService:Create(damageLabel, TweenInfo.new(0.5), {
-        TextTransparency = 1,
-        TextStrokeTransparency = 1
-    })
-
-    tween1:Play()
-    wait(0.1)
-    tween2:Play()
-
-    -- Remove after animation
     Debris:AddItem(part, 1)
 end
 
 function GameManager:CreateEliminationEffect(position)
-    -- Create explosion effect for elimination
     local explosion = Instance.new("Explosion")
     explosion.Position = position
     explosion.BlastRadius = 10
     explosion.BlastPressure = 0
     explosion.Parent = workspace
-
-    -- Create elimination text
-    local gui = Instance.new("BillboardGui")
-    gui.Size = UDim2.new(0, 200, 0, 100)
-    gui.StudsOffset = Vector3.new(0, 5, 0)
-
-    local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(1, 0, 1, 0)
-    label.BackgroundTransparency = 1
-    label.Text = "ELIMINATED!"
-    label.TextColor3 = Color3.new(1, 0, 0)
-    label.TextScaled = true
-    label.Font = Enum.Font.SourceSansBold
-    label.TextStrokeTransparency = 0
-    label.TextStrokeColor3 = Color3.new(0, 0, 0)
-    label.Parent = gui
-
-    local part = Instance.new("Part")
-    part.Size = Vector3.new(0.1, 0.1, 0.1)
-    part.Anchored = true
-    part.CanCollide = false
-    part.Transparency = 1
-    part.Position = position
-    part.Parent = workspace
-
-    gui.Parent = part
-
-    Debris:AddItem(part, 3)
 end
 
 -- Connect Remote Events
@@ -751,7 +590,7 @@ shootEvent.OnServerEvent:Connect(function(player, targetPosition, weaponType)
 end)
 
 reloadEvent.OnServerEvent:Connect(function(player, weaponType)
-    print("🔄 " .. player.Name .. " is reloading " .. weaponType)
+    GameManager:HandleReload(player, weaponType)
 end)
 
 -- Connect Player Events
@@ -768,25 +607,17 @@ for _, player in pairs(Players:GetPlayers()) do
     GameManager:OnPlayerJoined(player)
 end
 
--- Game loop for stats broadcasting
+-- Periodic scoreboard updates
 spawn(function()
     while true do
-        wait(1)
-        if gameState.isActive then
-            gameState.roundTime = gameState.roundTime - 1
-
-            if gameState.roundTime <= 0 then
-                print("Round ended!")
-                gameState.roundTime = GAME_CONFIG.ROUND_TIME
-            end
-        end
+        wait(5) -- Update scoreboard every 5 seconds
+        GameManager:UpdateScoreboard()
     end
 end)
 
 print("🎮 GameManager initialized successfully!")
-print("📡 RemoteEvents ready for client communication")
-print("⚔️ Enhanced weapon system loaded")
-print("🎯 Improved damage system active")
-print("💥 Visual effects system ready")
+print("📊 Scoreboard system active")
+print("🔫 Ammo tracking system ready")
+print("🔄 Reload system operational")
 
 return GameManager
